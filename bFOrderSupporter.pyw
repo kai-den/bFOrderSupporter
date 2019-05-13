@@ -1,8 +1,9 @@
-#bFOrderSupporter version 0.1 alpha
+#bFOrderSupporter version 0.1 alpha2
 import tkinter
 from tkinter import ttk,StringVar,DoubleVar,IntVar,BooleanVar,END,N,E,S,W
 import pybitflyer
 from tkinter.scrolledtext import ScrolledText
+from time import sleep
 
 #Frameを継承
 class OrderSupporter(tkinter.Frame):
@@ -22,7 +23,7 @@ class OrderSupporter(tkinter.Frame):
         #TKinterの変数
         self.amount = DoubleVar(value=0)
         self.entry_price_hundredth = IntVar(value=0) #entry_price_hundredthの下二桁は内部的にも省略。内部と外部を別に持つことによるバグを避けるため。使う時は×100する。
-        self.broadcast_range = IntVar(value=100)
+        self.broadcast_range = IntVar(value=500)
         self.broadcast_number = IntVar(value=10)
         self.cplimit_close_price = IntVar(value=0)
         self.trigger = IntVar(value=0)
@@ -30,7 +31,7 @@ class OrderSupporter(tkinter.Frame):
         self.incdec_amount = DoubleVar(value=0.2)
         self.incdec_entry_price_hundredth = IntVar(value=10)
         self.check_price_or_not = BooleanVar(value=False)
-        self.ltp_broadcast_range = IntVar(value=1000)
+        self.ltp_broadcast_range = IntVar(value=2500)
 
         #描画関連
         self.interface()
@@ -38,73 +39,76 @@ class OrderSupporter(tkinter.Frame):
 #注文関連
     def current_price_stop_order(self):
         #建玉の平均建値、合計建玉、方向を取得
-        average_price, sum_size, side = self.get__average_price__sum_size__side()
+        holding_or_no_position, average_price, sum_size, side = self.get__average_price__sum_size__side()
 
-        if 0 < float(self.amount_proportion.get()) <= 1: #ポジション割合が0～1か
-            print("保有中の建玉：平均建値：{}円\n 合計建玉：{}枚\n 方向：{}".format(average_price,sum_size,side))
-            self.out.insert(END, "保有中の建玉：平均建値：{}円\n 合計建玉：{}枚\n 方向：{}\n".format(average_price,sum_size,side)); self.out.see('end')
+        if holding_or_no_position:
+            if 0 < float(self.amount_proportion.get()) <= 1: #ポジション割合が0～1か
+                print("保有中の建玉：平均建値：{}円\n 合計建玉：{}枚\n 方向：{}".format(average_price,sum_size,side))
+                self.out.insert(END, "保有中の建玉：平均建値：{}円\n 合計建玉：{}枚\n 方向：{}\n".format(average_price,sum_size,side)); self.out.see('end')
 
-            if side == "BUY":
-                sside = "SELL"
-                trigger_price = average_price - self.trigger.get()
-            elif side == "SELL":
-                sside = "BUY"
-                trigger_price = average_price + self.trigger.get()
-            #価格チェックする時は、ltp取ってきてcheck_priceする
-            ltp = 0
-            if self.check_price_or_not.get():
-                ltp = self.api.ticker(product_code=self.product_code)['ltp']
-            if self.check_price(trigger_price, ltp):
-                self.api.sendparentorder(
-                    order_method = "SIMPLE",
-                    # minute_to_expire = 100,
-                    time_in_force =  self.time_in_force,
-                    parameters = [
-                        {
-                            "product_code": self.product_code,
-                            "condition_type": "STOP",
-                            "side": sside,
-                            "trigger_price": trigger_price,
-                            "size": round(sum_size * float(self.amount_proportion.get()),2)
-                        }
-                    ]
-                )
-        else:
-            print("CPSTOPの指定ロット割合には0より上、1以下を指定して下さい")
-            self.out.insert(END, "CPSTOPの指定ロット割合には0より上、1以下を指定して下さい\n"); self.out.see('end')
+                if side == "BUY":
+                    sside = "SELL"
+                    trigger_price = average_price - self.trigger.get()
+                elif side == "SELL":
+                    sside = "BUY"
+                    trigger_price = average_price + self.trigger.get()
+                #価格チェックする時は、ltp取ってきてcheck_priceする
+                ltp = 0
+                if self.check_price_or_not.get():
+                    ltp = self.api.ticker(product_code=self.product_code)['ltp']
+                if self.check_price(trigger_price, ltp):
+                    self.api.sendparentorder(
+                        order_method = "SIMPLE",
+                        # minute_to_expire = 100,
+                        time_in_force =  self.time_in_force,
+                        parameters = [
+                            {
+                                "product_code": self.product_code,
+                                "condition_type": "STOP",
+                                "side": sside,
+                                "trigger_price": trigger_price,
+                                "size": round(sum_size * float(self.amount_proportion.get()),2)
+                            }
+                        ]
+                    )
+            else:
+                print("CPSTOPの指定ロット割合には0より上、1以下を指定して下さい")
+                self.out.insert(END, "CPSTOPの指定ロット割合には0より上、1以下を指定して下さい\n"); self.out.see('end')
 
     def current_price_limit_order(self):
         #建玉の平均建値、合計建玉、方向を取得
-        average_price, sum_size, side = self.get__average_price__sum_size__side()
-        if 0 < float(self.amount_proportion.get()) <= 1: #ポジション割合が0～1か
+        holding_or_no_position, average_price, sum_size, side = self.get__average_price__sum_size__side()
 
-            print("保有中の建玉：平均建値：{}円\n 合計建玉：{}枚\n 方向：{}".format(average_price,sum_size,side))
-            self.out.insert(END, "保有中の建玉：平均建値：{}円\n 合計建玉：{}枚\n 方向：{}\n".format(average_price,sum_size,side)); self.out.see('end')
+        if holding_or_no_position:
+            if 0 < float(self.amount_proportion.get()) <= 1: #ポジション割合が0～1か
 
-            if side == "BUY":
-                    sside = "SELL"
-                    trigger_price = average_price + self.cplimit_close_price.get()
-            elif side == "SELL":
-                    sside = "BUY"
-                    trigger_price = average_price - self.cplimit_close_price.get()
+                print("保有中の建玉：平均建値：{}円\n 合計建玉：{}枚\n 方向：{}".format(average_price,sum_size,side))
+                self.out.insert(END, "保有中の建玉：平均建値：{}円\n 合計建玉：{}枚\n 方向：{}\n".format(average_price,sum_size,side)); self.out.see('end')
 
-            #価格チェックする時は、ltp取ってきてcheck_priceする
-            ltp = 0
-            if self.check_price_or_not.get():
-                ltp = self.api.ticker(product_code=self.product_code)['ltp']
-            if self.check_price(trigger_price, ltp):
-                self.api.sendchildorder(
-                    # minute_to_expire=100,
-                    time_in_force =  self.time_in_force,
-                    product_code = self.product_code,
-                    child_order_type = "LIMIT",
-                    side = sside,
-                    price = trigger_price,
-                    size = round(sum_size * float(self.amount_proportion.get()),2)
-                )
-        else:
-            print("CPLIMITの指定ロット割合には0より上、1以下を指定して下さい")
-            self.out.insert(END, "CPLIMITの指定ロット割合には0より上、1以下を指定して下さい\n"); self.out.see('end')
+                if side == "BUY":
+                        sside = "SELL"
+                        trigger_price = average_price + self.cplimit_close_price.get()
+                elif side == "SELL":
+                        sside = "BUY"
+                        trigger_price = average_price - self.cplimit_close_price.get()
+
+                #価格チェックする時は、ltp取ってきてcheck_priceする
+                ltp = 0
+                if self.check_price_or_not.get():
+                    ltp = self.api.ticker(product_code=self.product_code)['ltp']
+                if self.check_price(trigger_price, ltp):
+                    self.api.sendchildorder(
+                        # minute_to_expire=100,
+                        time_in_force =  self.time_in_force,
+                        product_code = self.product_code,
+                        child_order_type = "LIMIT",
+                        side = sside,
+                        price = trigger_price,
+                        size = round(sum_size * float(self.amount_proportion.get()),2)
+                    )
+            else:
+                print("CPLIMITの指定ロット割合には0より上、1以下を指定して下さい")
+                self.out.insert(END, "CPLIMITの指定ロット割合には0より上、1以下を指定して下さい\n"); self.out.see('end')
 
     def limit_order(self, side):
         #check_price用
@@ -184,10 +188,10 @@ class OrderSupporter(tkinter.Frame):
                 ltp = self.api.ticker(product_code=self.product_code)['ltp']
 
             #バラマキ数の数だけ繰り返す
-            bn = self.broadcast_number.get()
-            while bn > 0:
-                    bn -= 1
-                    price = entry_price + ((self.broadcast_range.get() * bn) * plus_or_minus)
+            count = self.broadcast_number.get()
+            while count > 0:
+                    count -= 1
+                    price = entry_price + ((self.broadcast_range.get() * count) * plus_or_minus)
                     size = round(float(self.amount.get()) / float(self.broadcast_number.get()),2)
                     print (" ロット:", size, "価格:", price)
                     self.out.insert(END, " ロット:{}, 価格:{}\n".format(size, price)); self.out.see('end')
@@ -202,6 +206,7 @@ class OrderSupporter(tkinter.Frame):
                             price = price,
                             size = size
                         )
+                    #sleep(0.001)
 
             print("バラマキ" + side + "指値、終了")
             self.out.insert(END, "バラマキ" + side + "指値、終了\n"); self.out.see('end')
@@ -220,8 +225,8 @@ class OrderSupporter(tkinter.Frame):
             plus_or_minus = 1
         self.broadcast_order(side, self.api.ticker(product_code=self.product_code)['ltp'] + (self.ltp_broadcast_range.get() * plus_or_minus))
 
-    #建玉の平均建値、合計建玉、方向を取得
-    def get__average_price__sum_size__side(self):
+    #建玉の有無、平均建値、合計建玉、方向を取得
+    def get__average_price__sum_size__side(self): #bool holding_or_no_position, int average_price, float sum_size, str side
         size = []
         price = []
         positions = self.api.getpositions(product_code=self.product_code)
@@ -229,6 +234,7 @@ class OrderSupporter(tkinter.Frame):
         if not positions:
             print("建玉はありません")
             self.out.insert(END, "建玉はありません\n"); self.out.see('end')
+            return False, 0, 0, ""
         else:
             for pos in positions:
                 size.append( pos['size'] )
@@ -237,16 +243,17 @@ class OrderSupporter(tkinter.Frame):
             # 平均建値と合計建玉を計算する
             average_price = round(sum( price[i] * size[i] for i in range(len(price)) ) / sum(size))
             sum_size = round(sum(size),2)
-        return average_price, sum_size, side
+        return True, average_price, sum_size, side
 
     def close_all_open_positions_by_market_order(self):
-        _, sum_size, side = self.get__average_price__sum_size__side()
-        if side == 'BUY':
-            self.market_order(side='SELL', amount=sum_size)
-        elif side =='SELL':
-            self.market_order(side='BUY', amount=sum_size)
-        print("すべての建玉を成り行きで決済します")
-        self.out.insert(END, "すべての建玉を成り行きで決済します\n"); self.out.see('end')
+        holding_or_no_position, _, sum_size, side = self.get__average_price__sum_size__side()
+        if holding_or_no_position:
+            if side == 'BUY':
+                self.market_order(side='SELL', amount=sum_size)
+            elif side =='SELL':
+                self.market_order(side='BUY', amount=sum_size)
+            print("すべての建玉を成り行きで決済します")
+            self.out.insert(END, "すべての建玉を成り行きで決済します\n"); self.out.see('end')
 
 #注文関連以外
     def get_clipboard(self):
@@ -268,7 +275,7 @@ class OrderSupporter(tkinter.Frame):
             pass
 
         #次のタイマーをセット。1秒に1回取得
-        root.after(1000, self.get_clipboard)
+        root.after(200, self.get_clipboard)
 
     #増減
     def inc_amount(self):
@@ -298,10 +305,11 @@ class OrderSupporter(tkinter.Frame):
             self.out.insert(END, "クリップボード価格との差:" +  str((self.entry_price_hundredth.get() - self.clip_board) * 100) + "\n"); self.out.see('end')
 
     def get_open_positions_amount(self):
-        _, sum_size, _ = self.get__average_price__sum_size__side()
+        holding_or_no_position, _, sum_size, _ = self.get__average_price__sum_size__side()
         self.amount.set(sum_size)
-        print("合計建玉:"  + str(sum_size) + "枚")
-        self.out.insert(END, "合計建玉:" + str(sum_size) + "枚\n"); self.out.see('end')
+        if holding_or_no_position:
+            print("合計建玉:"  + str(sum_size) + "枚")
+            self.out.insert(END, "合計建玉:" + str(sum_size) + "枚\n"); self.out.see('end')
 
     #loop内でも使うので、api使用は避ける。
     #チェック有効時に、価格が範囲内ならTrue、範囲外ならFalse、チェック無効時はTrueを返す
@@ -450,7 +458,7 @@ if __name__ == '__main__':
     root = tkinter.Tk()
 
     order = OrderSupporter(master=root)
-    order.after(1000, order.get_clipboard) #クリップボード監視
+    order.after(200, order.get_clipboard) #クリップボード監視
     order.mainloop()
 
 
